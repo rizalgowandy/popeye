@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package client
 
 const (
@@ -15,4 +18,10 @@ const (
 
 	// NotNamespaced designates a non resource namespace.
 	NotNamespaced = "*"
+
+	// BlankNamespace tracks an unspecified namespace.
+	BlankNamespace = ""
+
+	// DefaultNamespace tracks the default namespace.
+	DefaultNamespace = "default"
 )

@@ -17,27 +17,29 @@
 | 103        | No liveness probe                                                 | 2        |                  |
 | 104        | No readiness probe                                                | 2        |                  |
 | 105        | %s probe uses a port#, prefer a named port                        | 1        |                  |
-| 106        | No resources requests/limits defined                              | 2        |
+| 106        | No resources requests/limits defined                              | 2        |                  |
 | 107        | No resource limits defined                                        | 2        |                  |
 | 108        | Unnamed port %d                                                   | 1        |                  |
 | 109        | CPU Current/Request (%s/%s) reached user %d%% threshold (%d%%)    | 2        |                  |
 | 110        | Memory Current/Request (%s/%s) reached user %d%% threshold (%d%%) | 2        |                  |
 | 111        | CPU Current/Limit (%s/%s) reached user %d%% threshold (%d%%)      | 3        |                  |
 | 112        | Memory Current/Limit (%s/%s) reached user %d%% threshold (%d%%)   | 3        |                  |
+| 113        | Container image %s is not hosted on an allowed docker registry    | 3        |                  |
 
 ## Pod
 
-| Error Code | Message                                          | Severity | Info / Reference |
-| ---------- | ------------------------------------------------ | -------- | ---------------- |
-| 200        | Pod is terminating [%d/%d]                       | 2        |                  |
-| 201        | Pod is terminating [%d/%d] %s                    | 2        |                  |
-| 202        | Pod is waiting [%d/%d]                           | 3        |                  |
-| 203        | Pod is waiting [%d/%d] %s                        | 3        |                  |
-| 204        | Pod is not ready                                 | 3        |                  |
-| 205        | Pod was restarted a number of times              | 2        |                  |
-| 206        | No PodDisruptionBudget defined                   | 1        |                  |
-| 207        | Pod is in an unhappy phase                       | 3        |                  |
-| 208        | Unmanaged pod detected. Best to use a controller | 2        |                  |
+| Error Code | Message                                              | Severity | Info / Reference |
+| ---------- | ---------------------------------------------------- | -------- | ---------------- |
+| 200        | Pod is terminating [%d/%d]                           | 2        |                  |
+| 201        | Pod is terminating [%d/%d] %s                        | 2        |                  |
+| 202        | Pod is waiting [%d/%d]                               | 3        |                  |
+| 203        | Pod is waiting [%d/%d] %s                            | 3        |                  |
+| 204        | Pod is not ready                                     | 3        |                  |
+| 205        | Pod was restarted a number of times                  | 2        |                  |
+| 206        | No PodDisruptionBudget defined                       | 1        |                  |
+| 207        | Pod is in an unhappy phase                           | 3        |                  |
+| 208        | Unmanaged pod detected. Best to use a controller     | 2        |                  |
+| 209        | Pod is managed by multiple PodDisruptionBudgets (%s) | 2        |                  |
 
 ## Security
 
@@ -57,7 +59,7 @@
 | ---------- | ----------------------------------------------------------- | -------- | ---------------- |
 | 400        | Used? Unable to locate resource reference                   | 1        |                  |
 | 401        | Key "%s" used? Unable to locate key reference               | 1        |                  |
-| 402        | No metric-server detected %v                                | 1        |                  |
+| 402        | No metrics-server detected                                  | 1        |                  |
 | 403        | Deprecated %s API group "%s". Use "%s" instead              | 2        |                  |
 | 404        | Deprecation check failed. %v                                | 1        |                  |
 | 405        | Is this a jurassic cluster? Might want to upgrade K8s a bit | 2        |                  |
@@ -161,3 +163,22 @@
 | Error Code | Message                                   | Severity | Info / Reference |
 | ---------- | ----------------------------------------- | -------- | ---------------- |
 | 1300       | References a %s (%s) which does not exist | 2        |                  |
+
+## Ingress
+
+| Error Code | Message                                                       | Severity | Info / Reference |
+| ---------- | ------------------------------------------------------------- | -------- | ---------------- |
+| 1400       | Ingress LoadBalancer port reported an error: %s               | 3        |                  |
+| 1401       | Ingress references a service backend which does not exist: %s | 3        |                  |
+| 1402      | Ingress references a service port which is not defined: %s     | 3        |                  |
+| 1403      | Ingress backend uses a port#, prefer a named port: %d          | 1        |                  |
+| 1404      | Invalid Ingress backend spec. Must use port name or number     | 3        |                  |
+
+
+## CronJob
+
+| Error Code | Message                                   | Severity | Info / Reference |
+| ---------- | ----------------------------------------- | -------- | ---------------- |
+| 1500       | %s is suspended                           | 2        |                  |
+| 1501       | No active jobs detected                   | 1        |                  |
+| 1502      | CronJob has not run yet or is failing      | 2        |                  |

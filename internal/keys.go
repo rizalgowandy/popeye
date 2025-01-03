@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package internal
 
 // ContextKey represents context key.
@@ -13,4 +16,5 @@ const (
 	KeyConfig     ContextKey = "config"
 	KeyNamespace  ContextKey = "namespace"
 	KeyVersion    ContextKey = "version"
+	KeyDB         ContextKey = "db"
 )

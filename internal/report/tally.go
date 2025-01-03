@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package report
 
 import (
@@ -8,8 +11,8 @@ import (
 	"strconv"
 
 	"github.com/derailed/popeye/internal/issues"
-	"github.com/derailed/popeye/internal/sanitize"
-	"github.com/derailed/popeye/pkg/config"
+	"github.com/derailed/popeye/internal/lint"
+	"github.com/derailed/popeye/internal/rules"
 )
 
 const targetScore = 80
@@ -23,7 +26,9 @@ type Tally struct {
 
 // NewTally returns a new tally.
 func NewTally() *Tally {
-	return &Tally{counts: make([]int, 4)}
+	return &Tally{
+		counts: make([]int, 4),
+	}
 }
 
 // Score returns the tally computed score.
@@ -48,7 +53,7 @@ func (t *Tally) IsValid() bool {
 
 // Rollup tallies up the report scores.
 func (t *Tally) Rollup(o issues.Outcome) *Tally {
-	if o == nil || len(o) == 0 {
+	if len(o) == 0 {
 		t.valid, t.score = true, 100
 		return t
 	}
@@ -64,22 +69,22 @@ func (t *Tally) Rollup(o issues.Outcome) *Tally {
 
 // ComputeScore calculates the completed run score.
 func (t *Tally) computeScore() int {
-	var total, ok int
+	var issues, ok int
 	for i, v := range t.counts {
 		if i < 2 {
 			ok += v
 		}
-		total += v
+		issues += v
 	}
-	t.score = int(sanitize.ToPerc(int64(ok), int64(total)))
+	t.score = int(lint.ToPerc(int64(ok), int64(issues)))
 
 	return t.score
 }
 
 // Write out a tally.
-func (t *Tally) write(w io.Writer, s *Sanitizer) {
+func (t *Tally) write(w io.Writer, s *ScanReport) {
 	for i := len(t.counts) - 1; i >= 0; i-- {
-		emoji := EmojiForLevel(config.Level(i), s.jurassicMode)
+		emoji := EmojiForLevel(rules.Level(i), s.jurassicMode)
 		fmat := "%s %d "
 		if s.jurassicMode {
 			fmat = "%s:%d "
@@ -99,7 +104,7 @@ func (t *Tally) write(w io.Writer, s *Sanitizer) {
 }
 
 // Dump writes out tally and computes length
-func (t *Tally) Dump(s *Sanitizer) string {
+func (t *Tally) Dump(s *ScanReport) string {
 	w := bytes.NewBufferString("")
 	t.write(w, s)
 

@@ -1,9 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package report
 
 import (
 	"testing"
 
-	"github.com/derailed/popeye/pkg/config"
+	"github.com/derailed/popeye/internal/rules"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -32,7 +35,7 @@ func TestChanged(t *testing.T) {
 		},
 	}
 
-	l := config.OkLevel
+	l := rules.OkLevel
 	for k := range uu {
 		u := uu[k]
 		t.Run(k, func(t *testing.T) {
@@ -74,7 +77,7 @@ func TestBetter(t *testing.T) {
 		},
 	}
 
-	l := config.OkLevel
+	l := rules.OkLevel
 	for k := range uu {
 		u := uu[k]
 		t.Run(k, func(t *testing.T) {
@@ -116,7 +119,7 @@ func TestWorst(t *testing.T) {
 		},
 	}
 
-	l := config.OkLevel
+	l := rules.OkLevel
 	for k := range uu {
 		u := uu[k]
 		t.Run(k, func(t *testing.T) {
@@ -161,7 +164,7 @@ func TestSummarize(t *testing.T) {
 		},
 	}
 
-	l := config.OkLevel
+	l := rules.OkLevel
 	for k := range uu {
 		u := uu[k]
 		t.Run(k, func(t *testing.T) {

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package config
 
 const (
@@ -13,8 +16,6 @@ type Limits struct {
 
 // Node tracks node configurations.
 type Node struct {
-	Excludes `yaml:"exclude"`
-
 	Limits Limits `yaml:"limits"`
 }
 

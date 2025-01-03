@@ -1,23 +1,38 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package cache
 
 import (
+	"sync"
+
+	"github.com/derailed/popeye/internal"
+	"github.com/derailed/popeye/internal/db"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
-// ClusterRoleKey tracks ClusterRole resource references
-const ClusterRoleKey = "clusterrole"
-
 // ClusterRole represents ClusterRole cache.
 type ClusterRole struct {
-	crs map[string]*rbacv1.ClusterRole
+	db *db.DB
 }
 
 // NewClusterRole returns a new ClusterRole cache.
-func NewClusterRole(crs map[string]*rbacv1.ClusterRole) *ClusterRole {
-	return &ClusterRole{crs: crs}
+func NewClusterRole(db *db.DB) *ClusterRole {
+	return &ClusterRole{db: db}
 }
 
-// ListClusterRoles returns all available ClusterRoles on the cluster.
-func (c *ClusterRole) ListClusterRoles() map[string]*rbacv1.ClusterRole {
-	return c.crs
+// RoleRefs computes all role external references.
+func (r *ClusterRole) AggregationMatchers(refs *sync.Map) {
+	txn, it := r.db.MustITFor(internal.Glossary[internal.CR])
+	defer txn.Abort()
+	for o := it.Next(); o != nil; o = it.Next() {
+		cr := o.(*rbacv1.ClusterRole)
+		if cr.AggregationRule != nil {
+			for _, lbs := range cr.AggregationRule.ClusterRoleSelectors {
+				for k, v := range lbs.MatchLabels {
+					refs.Store(k, v)
+				}
+			}
+		}
+	}
 }
