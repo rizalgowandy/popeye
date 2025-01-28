@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package client
 
 import (
@@ -42,7 +45,7 @@ type APIClient struct {
 	mxsClient      *versioned.Clientset
 	cachedClient   *disk.CachedDiscoveryClient
 	config         types.Config
-	mx             sync.Mutex
+	mx             sync.RWMutex
 	cache          *cache.LRUExpireCache
 }
 
@@ -61,43 +64,58 @@ func InitConnectionOrDie(config types.Config) (*APIClient, error) {
 		config: config,
 		cache:  cache.NewLRUExpireCache(cacheSize),
 	}
+	if _, err := a.serverGroups(); err != nil {
+		return nil, fmt.Errorf("init connection fail: %w", err)
+	}
 	if err := a.supportsMetricsResources(); err != nil {
-		log.Warn().Msgf("no metrics server detected %s", err.Error())
+		log.Warn().Err(err).Msgf("no metrics server detected")
 	}
 
 	return &a, nil
 }
 
-func makeSAR(ns, gvr string) *authorizationv1.SelfSubjectAccessReview {
+func makeSAR(ns string, gvr types.GVR, n string) *authorizationv1.SelfSubjectAccessReview {
 	if ns == "-" {
 		ns = ""
 	}
-	spec := NewGVR(gvr)
-	res := spec.GVR()
+	res := gvr.GVR()
 	return &authorizationv1.SelfSubjectAccessReview{
 		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace:   ns,
 				Group:       res.Group,
 				Resource:    res.Resource,
-				Subresource: spec.SubResource(),
+				Subresource: gvr.SubResource(),
+				Name:        n,
 			},
 		},
 	}
 }
 
-func makeCacheKey(ns, gvr string, vv []string) string {
-	return ns + ":" + gvr + "::" + strings.Join(vv, ",")
+func makeCacheKey(ns string, gvr types.GVR, n string, vv []string) string {
+	return ns + ":" + gvr.String() + ":" + n + "::" + strings.Join(vv, ",")
+}
+
+// ActiveContext returns the current context name.
+func (a *APIClient) ActiveContext() string {
+	c, err := a.config.CurrentContextName()
+	if err != nil {
+		log.Error().Msgf("Unable to located active context")
+		return ""
+	}
+
+	return c
 }
 
 // ActiveCluster returns the current cluster name.
 func (a *APIClient) ActiveCluster() string {
-	c, err := a.config.CurrentClusterName()
+	cl, err := a.config.CurrentClusterName()
 	if err != nil {
 		log.Error().Msgf("Unable to located active cluster")
 		return ""
 	}
-	return c
+
+	return cl
 }
 
 // IsActiveNamespace returns true if namespaces matches.
@@ -112,8 +130,9 @@ func (a *APIClient) IsActiveNamespace(ns string) bool {
 func (a *APIClient) ActiveNamespace() string {
 	ns, err := a.CurrentNamespaceName()
 	if err != nil {
-		return AllNamespaces
+		return DefaultNamespace
 	}
+
 	return ns
 }
 
@@ -123,12 +142,19 @@ func (a *APIClient) clearCache() {
 	}
 }
 
+// ConnectionOK checks api server connection status.
+func (a *APIClient) ConnectionOK() bool {
+	_, err := a.Dial()
+
+	return err == nil
+}
+
 // CanI checks if user has access to a certain resource.
-func (a *APIClient) CanI(ns, gvr string, verbs []string) (auth bool, err error) {
+func (a *APIClient) CanI(ns string, gvr types.GVR, n string, verbs []string) (auth bool, err error) {
 	if IsClusterWide(ns) {
-		ns = AllNamespaces
+		ns = BlankNamespace
 	}
-	key := makeCacheKey(ns, gvr, verbs)
+	key := makeCacheKey(ns, gvr, n, verbs)
 	if v, ok := a.cache.Get(key); ok {
 		if auth, ok = v.(bool); ok {
 			return auth, nil
@@ -139,7 +165,7 @@ func (a *APIClient) CanI(ns, gvr string, verbs []string) (auth bool, err error) 
 	if err != nil {
 		return false, err
 	}
-	dial, sar := c.AuthorizationV1().SelfSubjectAccessReviews(), makeSAR(ns, gvr)
+	dial, sar := c.AuthorizationV1().SelfSubjectAccessReviews(), makeSAR(ns, gvr, n)
 	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
 	defer cancel()
 	for _, v := range verbs {
@@ -288,10 +314,15 @@ func (a *APIClient) CachedDiscovery() (*disk.CachedDiscoveryClient, error) {
 
 // DynDial returns a handle to a dynamic interface.
 func (a *APIClient) DynDial() (dynamic.Interface, error) {
+	a.mx.RLock()
 	if a.dClient != nil {
+		a.mx.RUnlock()
 		return a.dClient, nil
 	}
+	a.mx.RUnlock()
 
+	a.mx.Lock()
+	defer a.mx.Unlock()
 	rc, err := a.RestConfig()
 	if err != nil {
 		return nil, err
@@ -330,30 +361,38 @@ func (a *APIClient) checkCacheBool(key string) (state bool, ok bool) {
 	return
 }
 
+func (a *APIClient) serverGroups() (*metav1.APIGroupList, error) {
+	dial, err := a.CachedDiscovery()
+	if err != nil {
+		log.Warn().Err(err).Msgf("Unable to dial discovery API")
+		return nil, fmt.Errorf("unable to dial discovery: %w", err)
+	}
+	apiGroups, err := dial.ServerGroups()
+	if err != nil {
+		log.Warn().Err(err).Msgf("Unable to retrieve server groups")
+		return nil, fmt.Errorf("unable to fetch server groups: %w", err)
+	}
+
+	return apiGroups, nil
+}
+
 func (a *APIClient) supportsMetricsResources() error {
 	supported, ok := a.checkCacheBool(cacheMXAPIKey)
 	if ok {
 		if supported {
 			return nil
 		}
-		return errors.New("No metrics-server detected")
+		return errors.New("no metrics-server detected")
 	}
-
 	defer func() {
 		a.cache.Add(cacheMXAPIKey, supported, cacheExpiry)
 	}()
 
-	dial, err := a.CachedDiscovery()
+	gg, err := a.serverGroups()
 	if err != nil {
-		log.Warn().Err(err).Msgf("Unable to dial discovery API")
-		return err
+		return fmt.Errorf("supportmetricsResources call fail: %w", err)
 	}
-	apiGroups, err := dial.ServerGroups()
-	if err != nil {
-		log.Warn().Err(err).Msgf("Unable to retrieve server groups")
-		return err
-	}
-	for _, grp := range apiGroups.Groups {
+	for _, grp := range gg.Groups {
 		if grp.Name != metricsapi.GroupName {
 			continue
 		}
@@ -363,8 +402,9 @@ func (a *APIClient) supportsMetricsResources() error {
 		}
 	}
 
-	return errors.New("No metrics-server detected")
+	return errors.New("no metrics-server detected")
 }
+
 func checkMetricsVersion(grp metav1.APIGroup) bool {
 	for _, version := range grp.Versions {
 		for _, supportedVersion := range supportedMetricsAPIVersions {

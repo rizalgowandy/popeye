@@ -1,11 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 
 	"github.com/derailed/popeye/internal/report"
@@ -23,11 +24,15 @@ var (
 	flags   = config.NewFlags()
 	rootCmd = &cobra.Command{
 		Use:   execName(),
-		Short: "A Kubernetes Cluster sanitizer and linter",
+		Short: "A Kubernetes Cluster resource linter",
 		Long:  `Popeye scans your Kubernetes clusters and reports potential resource issues.`,
 		Run:   doIt,
 	}
 )
+
+func init() {
+	initFlags()
+}
 
 func execName() string {
 	n := "popeye"
@@ -37,61 +42,49 @@ func execName() string {
 	return n
 }
 
-func init() {
-	rootCmd.AddCommand(versionCmd())
-	initFlags()
-}
-
 // Execute root command
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		bomb(fmt.Sprintf("Exec failed %s", err))
+		return
 	}
 }
 
 // Doit runs the scans and lints pass over the specified cluster.
 func doIt(cmd *cobra.Command, args []string) {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	bomb(initLogs())
 
 	defer func() {
 		if err := recover(); err != nil {
-			printMsgLogo("DOH", "X", report.ColorOrangish, report.ColorRed)
-			fmt.Printf("\n\nBoom! %v\n", err)
-			log.Error().Msgf("%v", err)
-			log.Error().Msg(string(debug.Stack()))
-			os.Exit(1)
+			pkg.BailOut(err.(error))
 		}
 	}()
 
 	clearScreen()
-	err := checkFlags()
-	if err != nil {
-		bomb(fmt.Sprintf("%v", err))
-	}
+	bomb(flags.Validate())
 	flags.StandAlone = true
 	popeye, err := pkg.NewPopeye(flags, &log.Logger)
 	if err != nil {
-		bomb(fmt.Sprintf("Popeye configuration load failed %v", err))
+		bomb(fmt.Errorf("popeye configuration load failed %w", err))
 	}
-	if e := popeye.Init(); e != nil {
-		bomb(e.Error())
-	}
-	errCount, score, err := popeye.Sanitize()
-	if err != nil {
-		bomb(err.Error())
-	}
+	bomb(popeye.Init())
 
+	errCount, score, err := popeye.Lint()
+	if err != nil {
+		bomb(err)
+	}
 	if flags.ForceExitZero != nil && *flags.ForceExitZero {
 		os.Exit(0)
 	}
-
 	if errCount > 0 || (flags.MinScore != nil && score < *flags.MinScore) {
 		os.Exit(1)
 	}
 }
 
-func bomb(msg string) {
-	panic(fmt.Sprintf("💥 %s\n", report.Colorize(msg, report.ColorRed)))
+func bomb(err error) {
+	if err == nil {
+		return
+	}
+	panic(fmt.Errorf("💥 %s", report.Colorize(err.Error(), report.ColorRed)))
 }
 
 func initPopeyeFlags() {
@@ -113,7 +106,7 @@ func initPopeyeFlags() {
 
 	rootCmd.Flags().StringVarP(flags.Output, "out", "o",
 		"standard",
-		"Specify the output type (standard, jurassic, yaml, json, html, junit, prometheus, score)",
+		"Specify the output type (standard, jurassic, yaml, json, html, junit, score)",
 	)
 
 	rootCmd.Flags().BoolVarP(flags.Save, "save", "",
@@ -123,25 +116,25 @@ func initPopeyeFlags() {
 
 	rootCmd.Flags().StringVarP(flags.OutputFile, "output-file", "",
 		"",
-		"Specify the name of the saved output file",
+		"Specify the file name to persist report to disk",
 	)
 
-	rootCmd.Flags().StringVarP(flags.S3Bucket, "s3-bucket", "",
+	rootCmd.Flags().StringVarP(flags.S3.Bucket, "s3-bucket", "",
 		"",
 		"Specify to which S3 bucket you want to save the output file",
 	)
-	rootCmd.Flags().StringVarP(flags.S3Region, "s3-region", "",
+	rootCmd.Flags().StringVarP(flags.S3.Region, "s3-region", "",
 		"",
 		"Specify an s3 compatible region when the s3-bucket option is enabled",
 	)
-	rootCmd.Flags().StringVarP(flags.S3Endpoint, "s3-endpoint", "",
+	rootCmd.Flags().StringVarP(flags.S3.Endpoint, "s3-endpoint", "",
 		"",
 		"Specify an s3 compatible endpoint when the s3-bucket option is enabled",
 	)
 
 	rootCmd.Flags().StringVarP(flags.InClusterName, "cluster-name", "",
 		"",
-		"Specificy a cluster name when running popeye in cluster",
+		"Specify a cluster name when running popeye in cluster",
 	)
 
 	rootCmd.Flags().StringVarP(flags.LintLevel, "lint", "l",
@@ -161,7 +154,7 @@ func initPopeyeFlags() {
 
 	rootCmd.Flags().BoolVarP(flags.AllNamespaces, "all-namespaces", "A",
 		false,
-		"Sanitize all namespaces",
+		"When present, runs linters for all namespaces",
 	)
 
 	rootCmd.Flags().StringVarP(flags.Spinach, "file", "f",
@@ -171,7 +164,16 @@ func initPopeyeFlags() {
 
 	rootCmd.Flags().StringSliceVarP(flags.Sections, "sections", "s",
 		[]string{},
-		"Specifies which resources to include in the scan ie -s po,svc",
+		"Specify which resources to include in the scan ie -s po,svc",
+	)
+
+	rootCmd.Flags().IntVarP(flags.LogLevel, "log-level", "v",
+		1,
+		"Specify log level. Use 0|1|2|3|4 for disable|info|warn|error|debug",
+	)
+	rootCmd.Flags().StringVarP(flags.LogFile, "logs", "",
+		pkg.LogFile,
+		"Specify log file location. Use `none` for stdout",
 	)
 }
 
@@ -217,6 +219,49 @@ func initKubeConfigFlags() {
 		[]string{},
 		"Group to impersonate for the operation",
 	)
+}
+
+func initLogs() error {
+	var logs string
+	if *flags.LogFile != "none" {
+		logs = *flags.LogFile
+	}
+
+	var file = os.Stdout
+	if logs != "" {
+		mod := os.O_CREATE | os.O_APPEND | os.O_WRONLY
+		var err error
+		file, err = os.OpenFile(logs, mod, 0644)
+		if err != nil {
+			return fmt.Errorf("unable to create Popeye log file: %w", err)
+		}
+	}
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: file})
+
+	if flags.LogLevel == nil {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	} else {
+		zerolog.SetGlobalLevel(toLogLevel(*flags.LogLevel))
+	}
+
+	return nil
+}
+
+func toLogLevel(level int) zerolog.Level {
+	switch level {
+	case -1:
+		return zerolog.TraceLevel
+	case 0:
+		return zerolog.Disabled
+	case 1:
+		return zerolog.InfoLevel
+	case 2:
+		return zerolog.WarnLevel
+	case 3:
+		return zerolog.ErrorLevel
+	default:
+		return zerolog.DebugLevel
+	}
 }
 
 func initFlags() {
@@ -274,33 +319,23 @@ func initFlags() {
 	)
 
 	rootCmd.Flags().StringVar(
-		flags.PushGateway.Address,
-		"pushgateway-address",
+		flags.PushGateway.URL,
+		"push-gtwy-url",
 		"",
-		"Address of pushgateway e.g. http://localhost:9091",
+		"Prometheus pushgateway address e.g. http://localhost:9091",
 	)
 	rootCmd.Flags().StringVar(
 		flags.PushGateway.BasicAuth.User,
-		"pushgateway-user",
+		"push-gtwy-user",
 		"",
-		"BasicAuth username for pushgateway",
+		"Prometheus pushgateway auth username",
 	)
 	rootCmd.Flags().StringVar(
 		flags.PushGateway.BasicAuth.Password,
-		"pushgateway-password",
+		"push-gtwy-password",
 		"",
-		"BasicAuth password for pushgateway",
+		"Prometheus pushgateway auth password",
 	)
-}
-
-func checkFlags() error {
-	if flags.OutputFormat() == report.PrometheusFormat && *flags.PushGateway.Address == "" {
-		return errors.New("Please set pushgateway-address and auth if necessary")
-	}
-	if !*flags.Save && *flags.OutputFile != "" {
-		return errors.New("Please set '--save' flag to use 'output-file'.")
-	}
-	return nil
 }
 
 // ----------------------------------------------------------------------------
@@ -311,28 +346,4 @@ func clearScreen() {
 		return
 	}
 	fmt.Print("\033[H\033[2J")
-}
-
-func printMsgLogo(msg, eye string, title, logo report.Color) {
-	for i, s := range report.GraderLogo {
-		switch i {
-		case 0, 1, 2:
-			s = strings.Replace(s, "o", string(msg[i]), 1)
-		case 3:
-			s = strings.Replace(s, "a", eye, 1)
-		}
-
-		if i < len(report.Popeye) {
-			fmt.Printf("%s", report.Colorize(report.Popeye[i], title))
-			fmt.Printf("%s", strings.Repeat(" ", 22))
-		} else {
-			if i == 4 {
-				fmt.Printf("%s", report.Colorize("  Biffs`em and Buffs`em!", logo))
-				fmt.Printf("%s", strings.Repeat(" ", 26))
-			} else {
-				fmt.Printf("%s", strings.Repeat(" ", 50))
-			}
-		}
-		fmt.Println(report.Colorize(s, logo))
-	}
 }

@@ -1,10 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package report
 
 import (
 	"fmt"
 	"strconv"
 
-	"github.com/derailed/popeye/pkg/config"
+	"github.com/derailed/popeye/internal/rules"
 )
 
 // Color ANSI palette (256!)
@@ -39,15 +42,15 @@ func Colorize(s string, c Color) string {
 	return "\033[38;5;" + strconv.Itoa(int(c)) + "m" + s + "\033[0m"
 }
 
-func colorForLevel(l config.Level) Color {
+func colorForLevel(l rules.Level) Color {
 	switch l {
-	case config.ErrorLevel:
+	case rules.ErrorLevel:
 		return ColorRed
-	case config.WarnLevel:
+	case rules.WarnLevel:
 		return ColorOrangish
-	case config.InfoLevel:
+	case rules.InfoLevel:
 		return ColorAqua
-	case config.OkLevel:
+	case rules.OkLevel:
 		return ColorDarkOlive
 	default:
 		return ColorLighSlate

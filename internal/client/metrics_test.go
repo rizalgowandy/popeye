@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package client
 
 import (
@@ -35,7 +38,6 @@ func TestMetricsEmpty(t *testing.T) {
 	}
 }
 
-// ----------------------------------------------------------------------------
 // Helpers...
 
 func toQty(s string) resource.Quantity {

@@ -1,10 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package dao
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/derailed/popeye/internal/client"
 	"github.com/derailed/popeye/types"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -13,11 +15,11 @@ import (
 type NonResource struct {
 	types.Factory
 
-	gvr client.GVR
+	gvr types.GVR
 }
 
 // Init initializes the resource.
-func (n *NonResource) Init(f types.Factory, gvr client.GVR) {
+func (n *NonResource) Init(f types.Factory, gvr types.GVR) {
 	n.Factory, n.gvr = f, gvr
 }
 

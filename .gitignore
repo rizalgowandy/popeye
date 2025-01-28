@@ -18,3 +18,7 @@ popeye
 .idea
 spinach.yml
 /kind
+/spinach-me
+__debug_bin*
+.act-evt
+/Dockerfile.cross

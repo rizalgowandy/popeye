@@ -1,11 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package dao
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/derailed/popeye/internal"
 	"github.com/derailed/popeye/internal/client"
-	"github.com/rs/zerolog/log"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,13 +22,10 @@ type Generic struct {
 
 // List returns a collection of resources.
 func (g *Generic) List(ctx context.Context) ([]runtime.Object, error) {
-	labelSel, ok := ctx.Value(internal.KeyLabels).(string)
-	if !ok {
-		log.Debug().Msgf("No label selector found in context. Listing all resources")
-	}
+	labelSel, _ := ctx.Value(internal.KeyLabels).(string)
 	ns, ok := ctx.Value(internal.KeyNamespace).(string)
 	if !ok {
-		panic("BOOM no ns in context")
+		return nil, fmt.Errorf("BOOM!! no namespace found in context %s", g.gvr)
 	}
 	if client.IsAllNamespace(ns) {
 		ns = client.AllNamespaces
@@ -39,6 +39,7 @@ func (g *Generic) List(ctx context.Context) ([]runtime.Object, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if client.IsClusterScoped(ns) {
 		ll, err = dial.List(ctx, metav1.ListOptions{LabelSelector: labelSel})
 	} else {
@@ -77,5 +78,6 @@ func (g *Generic) dynClient() (dynamic.NamespaceableResourceInterface, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return dial.Resource(g.gvr.GVR()), nil
 }

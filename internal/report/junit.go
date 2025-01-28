@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package report
 
 import (
@@ -7,17 +10,18 @@ import (
 	"strings"
 
 	"github.com/derailed/popeye/internal/issues"
-	"github.com/derailed/popeye/pkg/config"
+	"github.com/derailed/popeye/internal/rules"
 )
 
 // TestSuites a collection of junit test suites.
 type TestSuites struct {
-	XMLName  xml.Name `xml:"testsuites"`
-	Name     string   `xml:"name,attr"`
-	Tests    int      `xml:"tests,attr"`
-	Failures int      `xml:"failures,attr"`
-	Errors   int      `xml:"errors,attr"`
-	Suites   []TestSuite
+	XMLName   xml.Name `xml:"testsuites"`
+	Name      string   `xml:"name,attr"`
+	Timestamp string   `xml:"report_time,attr"`
+	Tests     int      `xml:"tests,attr"`
+	Failures  int      `xml:"failures,attr"`
+	Errors    int      `xml:"errors,attr"`
+	Suites    []TestSuite
 }
 
 // TestSuite represents a collection of tests
@@ -60,11 +64,12 @@ type Error struct {
 	Type    string   `xml:"type,attr"`
 }
 
-func junitMarshal(b *Builder, level config.Level) ([]byte, error) {
+func junitMarshal(b *Builder, level rules.Level) ([]byte, error) {
 	s := TestSuites{
-		Name:   "Popeye",
-		Tests:  len(b.Report.Sections),
-		Errors: len(b.Report.Errors),
+		Name:      "Popeye",
+		Timestamp: b.Report.Timestamp,
+		Tests:     len(b.Report.Sections),
+		Errors:    len(b.Report.Errors),
 	}
 
 	for _, section := range b.Report.Sections {
@@ -74,7 +79,7 @@ func junitMarshal(b *Builder, level config.Level) ([]byte, error) {
 	return xml.MarshalIndent(s, "", "\t")
 }
 
-func newSuite(s Section, level config.Level) TestSuite {
+func newSuite(s Section, level rules.Level) TestSuite {
 	total, fails, errs := numTests(s.Outcome)
 	ts := TestSuite{
 		Name:     s.Title,
@@ -100,9 +105,9 @@ func newTestCase(res string, ii issues.Issues) TestCase {
 	for _, i := range ii {
 		// nolint:exhaustive
 		switch i.Level {
-		case config.WarnLevel:
+		case rules.WarnLevel:
 			tc.Failures = append(tc.Failures, newFailure(i))
-		case config.ErrorLevel:
+		case rules.ErrorLevel:
 			tc.Errors = append(tc.Errors, newError(i))
 		}
 	}
@@ -114,10 +119,10 @@ func numTests(o issues.Outcome) (total, fails, errors int) {
 	for _, v := range o {
 		total += 1
 		for _, i := range v {
-			if i.Level >= config.WarnLevel {
+			if i.Level >= rules.WarnLevel {
 				fails++
 			}
-			if i.Level == config.ErrorLevel {
+			if i.Level == rules.ErrorLevel {
 				errors++
 			}
 		}
@@ -125,7 +130,7 @@ func numTests(o issues.Outcome) (total, fails, errors int) {
 	return
 }
 
-func tallyToProps(t *Tally, level config.Level) []Property {
+func tallyToProps(t *Tally, level rules.Level) []Property {
 	var p []Property
 
 	for i, s := range t.counts {

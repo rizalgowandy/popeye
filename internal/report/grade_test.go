@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright Authors of Popeye
+
 package report
 
 import (
@@ -38,7 +41,7 @@ func TestBadge(t *testing.T) {
 		},
 	}
 
-	s := new(Sanitizer)
+	s := new(ScanReport)
 	for _, u := range uu {
 		assert.Equal(t, u.e, strings.Join(s.Badge(u.score), "\n"))
 	}
